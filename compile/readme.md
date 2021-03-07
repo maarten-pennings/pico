@@ -126,7 +126,7 @@ insert the Pico USB plug while holding down the BOOTSEL button.
 ## Hardware mod
 
 Replugging the USB cable is such a hassle that I added
-a reset button myself.
+a [reset button](https://www.youtube.com/watch?v=d-karKb53og) myself.
 
 ![reset button](pico-reset.png)
 

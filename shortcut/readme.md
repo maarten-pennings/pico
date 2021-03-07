@@ -194,9 +194,5 @@ export PICO_PLAYGROUND_PATH=/home/pi/pico/pico-playground
 
 As a result, these variables are not available for the X server.
 
+(end)
 
-
-
-
-
-[Add reset button](https://www.youtube.com/watch?v=d-karKb53og)
