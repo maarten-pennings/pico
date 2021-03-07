@@ -213,6 +213,25 @@ drwxr-xr-x 3 pi pi 4096 Mar  7 20:54 ..
 -rw-r--r-- 1 pi pi  128 Mar  7 21:02 Testproject.c
 ```
 
+We do need to "fix a bug" here.
+
+The generate c file has a single `printf` call. 
+That is not enough to receive any characters, somehow, it is even not enough to get a `/dev/ttyACM0`.
+So, change the c code to e.g.
+
+```c
+#include <stdio.h>
+#include "pico/stdlib.h"
+
+int main() {
+    stdio_init_all();
+    while( 1 ) {
+        printf("Hello, from Testproject!\n");
+    }
+    return 0;
+}
+```
+
 
 ## Build the template
 
@@ -237,5 +256,7 @@ Scanning dependencies of target bs2_default
 [100%] Built target Testproject
 pi@raspberrypi:~/Documents/Testproject/build $ cp *.uf2 /media/pi/RPI-RP2/
 ```
+
+Use `minicom -b 115200 -o -D /dev/ttyACM0` to see the messages (and ^AZ to quit).
 
 (end)
