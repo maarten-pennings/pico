@@ -1,2 +1,2 @@
 # Pico
-Playing with the Raspberry Pi Pico
+Playing with the Raspberry Pi Pico.
