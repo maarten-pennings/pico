@@ -6,6 +6,8 @@ that you can double-click to execute the underlying program.
 There is actually a second issue: the program I wanted to execute used
 environment variables, and those appeared not to be available.
 
+The actual use-case is an icon for the pico project generator.
+
 
 ## Test framework
 
@@ -169,10 +171,14 @@ drwxr-xr-x 14 pi pi 4096 Mar  7 13:41 ..
 ```
 
 
-## Todo
+## Pico SDK path
 
-One of the side effects of `pico_setup.sh` is that some global 
-variables are created.
+After installing the pico SDK and the project generator utility,
+see [elsewhere](../compile), I wanted to create an icon for that
+project generator.
+
+The project generator needs the `PICO_SDK_PATH` variable.
+This and others are created by the `pico_setup.sh`.
 
 ```bash
 pi@raspberrypi:~/pico $ env | grep PICO
@@ -192,7 +198,79 @@ export PICO_EXTRAS_PATH=/home/pi/pico/pico-extras
 export PICO_PLAYGROUND_PATH=/home/pi/pico/pico-playground
 ```
 
-As a result, these variables are not available for the X server.
+As a result, these variables are not available for the X server,
+and thus double-clicnking `pico_project.py` doesn't work.
+Let's apply the learnings from the previous paragraph.
+
+So, we change the `.myrc` to
+
+```bash
+# /home/pi/.myrc - My common settings, run from .bashrc and.xsessionrc
+
+# The crucial lines go here, the settings common with .bashrc
+export PICO_SDK_PATH=/home/pi/pico/pico-sdk
+export PICO_EXAMPLES_PATH=/home/pi/pico/pico-examples
+export PICO_EXTRAS_PATH=/home/pi/pico/pico-extras
+export PICO_PLAYGROUND_PATH=/home/pi/pico/pico-playground
+```
+
+We can now call that from `.bashrc`. We replace the 4 export lines to
+sourcing the `.myrc`.
+
+```bash
+# ~/.bashrc: executed by bash(1) for non-login shells.
+...
+
+# Added by pico sdk setup script, but moved to .myrc
+. .myrc
+```
+
+And we do the same for `.xsessionrc`.
+
+```bash
+# /home/pi/.xsessionrc - Created to run .myrc with settings common with .bashrc
+
+# The crucial lines go here, source the settings common with .bashrc
+. /home/pi/.myrc
+```
+
+
+## Shortcut on Desktop
+
+Last step is to create a "shortcut" which is different then a 
+(hard or soft) link. A shortcut is a file that describes what to run.
+This is one of the thing sthat is surprisingly hard on linux.
+I found hints for [Ubuntu](https://www.howtogeek.com/445303/how-to-create-desktop-shortcuts-on-ubuntu/).
+
+On the `Desktop` create a file that has extension `desktop`, 
+e.g. `PicoProjectGenerator.desktop`, with these contents.
+
+```
+[Desktop Entry]
+Version=1.0
+Name=Pico project generator
+GenericName=Application to generate an empty project for the Raspberry Pi Pico
+Comment=Application to generate an empty project for the Raspberry Pi Pico
+Exec=/home/pi/bin/pico-project-generator/pico_project.py --gui
+Path=/home/pi/Documents
+Icon=/home/pi/bin/pico-project-generator/logo_alpha.gif
+Terminal=false
+Type=Application
+Categories=Application
+```
+
+Note that `Exec` has `--gui` as parameter.
+Note that `Path` is used as default "Location" for the project generator.
+The `Icon` is a image file, I decide to use the image that comes with the project generator.
+
+This creates a shortcut on the desktop
+
+![Shortcut on Desktop](shortcut.png)
+
+
+## Shortcut in Startmenu
+
+todo...
 
 (end)
 
