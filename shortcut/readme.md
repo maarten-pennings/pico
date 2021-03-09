@@ -11,7 +11,7 @@ The actual use-case is an icon for the pico project generator.
 
 ## Test framework
 
-To be in full control, I first wrote my own tes application.
+To be in full control, I first wrote my own test application.
 I called it `var.py`, I stored it on the desktop, and I made
 it executable (`chmod +x var.py`).
 
@@ -20,8 +20,6 @@ pi@raspberrypi:~/Desktop $ ls -al
 total 12
 drwxr-xr-x  2 pi pi 4096 Mar  7 12:31 .
 drwxr-xr-x 13 pi pi 4096 Mar  7 12:35 ..
--rw-r--r--  1 pi pi    0 Mar  7 12:29 run.myrc
--rw-r--r--  1 pi pi    0 Mar  7 12:29 run.xsessionrc
 -rwxr-xr-x  1 pi pi  270 Mar  7 12:28 var.py
 ```
 
@@ -52,7 +50,7 @@ put( get('MYRC') )
 
 Since this script is not run from a terminal, the output is
 not `print`ed, but rather a file is created on the desktop.
-Function `put()` take scare of that. The filename is the 
+Function `put()` takes care of that. The filename is the 
 string returned by `get()`.
 
 We can run this script, and this is the result.
@@ -66,7 +64,7 @@ The result is as expected; there is no variable `MYRC` yet.
 
 ## Configuring double click
 
-We can run `var.y` from a terminal with the commad `./var.py`, or we 
+We can run `var.py` from a terminal with the commad `./var.py`, or we 
 can simply double-click it; after all, it is on the desktop.
 
 However, the latter approach does come up with a dialog
@@ -76,7 +74,7 @@ However, the latter approach does come up with a dialog
 and you either select `Execute` or `Execute in Terminal` - in this case
 there is not much difference.
 
-You can get rid of this, but it is a global setting.
+You can get rid of this dialog, but it is a global setting.
 In the File Manager, select Edit then Preferences.
 In the General tab you place a checkmark for "Don't ask options on launch executable file".
 
@@ -97,7 +95,7 @@ This means that if we run `var.py` from a terminal all is fine.
 The terminal runs bash, which sources `.bashrc` which defines the
 variable.
 
-However, as Thomas explained, the double click is from the X server.
+However, as Thomas explained, the double-click is different.
 
 The X server and the desktop manager are both usually started by 
 the init system and hence inherit the user/group and permissions of 
@@ -109,10 +107,10 @@ What is sourced is `.xsessionrc`.
 So whatever you want to have in your environment for your 
 X session should be put in there.
 
-If you want to share between `.xsessionrc` and `.bashrc`, put it 
+If you want to share between `.xsessionrc` and `.bashrc`, put the shared definitions
 into e.g. `.myrc` and source that from both `.xsessionrc` and `.bashrc`.
 
-I created the two files in my home directory. Note that I made
+I created `.myrc` and `.xsessionrc` in my home directory, `.bashrc`  was already there.
 
 ```bash
 pi@raspberrypi:~ $ ls -tal 
@@ -120,9 +118,10 @@ total 100
 drwxr-xr-x 14 pi   pi   4096 Mar  7 13:35 .
 -rw-r--r--  1 pi   pi    291 Mar  7 13:35 .myrc
 -rw-r--r--  1 pi   pi    280 Mar  7 13:35 .xsessionrc
+...
 ```
 
-The first one (`.myrc`) defines the variable.
+The first file (`.myrc`) defines the variable.
 
 ```bash
 # /home/pi/.myrc - My common settings, run from .bashrc and.xsessionrc
@@ -152,7 +151,7 @@ In both scripts I have added a "debug" line to test if
 the script is actually executed.
 
 If we now reboot, the X manager is restarted, and it should
-call `.xsessionrc`, which sources `.myrc`, so both run the `touch`
+call `.xsessionrc`, which sources `.myrc`. Both run their `touch`
 command. As a result, two files should appear on the Desktop.
 And they do.
 
@@ -173,9 +172,9 @@ drwxr-xr-x 14 pi pi 4096 Mar  7 13:41 ..
 
 ## Pico SDK path
 
-After installing the pico SDK and the project generator utility,
-see [elsewhere](../compile), I wanted to create an icon for that
-project generator.
+After [installing the pico SDK and the project generator utility](../compile), 
+I wanted to create an icon for the project generator.
+That is actually what this whole readme is about.
 
 The project generator needs the `PICO_SDK_PATH` variable.
 This and others are created by the `pico_setup.sh`.
@@ -199,7 +198,7 @@ export PICO_PLAYGROUND_PATH=/home/pi/pico/pico-playground
 ```
 
 As a result, these variables are not available for the X server,
-and thus double-clicnking `pico_project.py` doesn't work.
+and thus double-clicking `pico_project.py` doesn't work.
 Let's apply the learnings from the previous paragraph.
 
 So, we change the `.myrc` to
@@ -222,7 +221,7 @@ sourcing the `.myrc`.
 ...
 
 # Added by pico sdk setup script, but moved to .myrc
-. .myrc
+. /home/pi/.myrc
 ```
 
 And we do the same for `.xsessionrc`.
@@ -237,9 +236,12 @@ And we do the same for `.xsessionrc`.
 
 ## Shortcut on Desktop
 
-Last step is to create a "shortcut" which is different then a 
-(hard or soft) link. A shortcut is a file that describes what to run.
-This is one of the thing sthat is surprisingly hard on linux.
+We can now double-click the project generator, but unfortunately it needs an
+additional parameter (`--gui`). Also a dedicated icon (not just Python's) would be nice.
+
+So our last step is to create a "shortcut". Do not confuse this with a (hard or soft) link. 
+A shortcut is a file that describes what to run, where, which parameters, what icon, etc.
+This is one of the things that is surprisingly hard on linux.
 I found hints for [Ubuntu](https://www.howtogeek.com/445303/how-to-create-desktop-shortcuts-on-ubuntu/).
 
 On the `Desktop` create a file that has extension `desktop`, 
@@ -260,8 +262,8 @@ Categories=Application
 ```
 
 Note that `Exec` has `--gui` as parameter.
-Note that `Path` is used as default "Location" for the project generator.
-The `Icon` is a image file, I decide to use the image that comes with the project generator.
+Note that `Path` sets the active directory, which is used by the project generator as default "Location".
+The `Icon` is a image file used for the shortcut, I decide to use the image that comes with the project generator.
 
 This creates a shortcut on the desktop
 
@@ -270,7 +272,7 @@ This creates a shortcut on the desktop
 
 ## Shortcut in Startmenu
 
-todo...
+I do not yet know how to create an entry in the "Start menu".
 
 (end)
 
