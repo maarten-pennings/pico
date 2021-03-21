@@ -8,8 +8,17 @@ and VS code as IDE.
 
 The diagram below (made with [draw.io](draw.io)) shows all components needed for debugging.
 
-![Debug setup](system.png)
+![Debug setup](system.drawio.png)
 
+On the right we find Pico B, the **target** device. This is the pico for which we develop software. It will run the _user firmware_, for example "blinky with printf". The printf's are typically mapped to the hardware UART of Pico B.
+
+Pico A is the _debug adapter_ or **probe**. It not only _powers_ Pico B, but also fully controls Pico B using the SWD wires. Thirdly, Pico A bridges the UART of Pico B over USB to the host. The SWD control and UART bridging is implemented in picoprobe firmware which can be downloaded and flashed to Pico A.
+
+The **host**, in this readme assumed to be a raspberry pi 400, connects to the Pico A using USB. The Pico A surfaces as two devices on the host: a serial port (typically `/dev/ttyACM0`) which is the bridged UART from Pico B, and a probe (some USB device - unclear to me).
+
+On the host we run OpenOCD. It has build-in knowledge of several probes including picoprobe. It implements two **servers**: telnet and gdb. As developement tool, we use Visual Studio Code, which acts as a gdb client.
+
+This document goes through the steps of implementing what is depicted in the diagram.
 
 ## Step 0: Getting started
 
@@ -18,14 +27,14 @@ I started this setup process with a complete fresh Pi 400 image.
 
 The key document for this experiment is [getting-started-with-pico.pdf](getting-started-with-pico.pdf)
 which can be found on [https://datasheets.raspberrypi.org/](https://datasheets.raspberrypi.org/).
-I downloaded that first. I have version `build-date: 2021-03-05` and `build-version: 9bf4a25-clean`.
+I downloaded that first. I have version `build-date: 2021-03-05` and `build-version: 9bf4a25-clean`. At the moment of writing this page, that document is still changing frequently.
 
 ## Step 1: Install Pico SDK
 
-As the document explains 
+As the document explains
 _"most of the installation steps in this Getting Started guide can be skipped by running the setup script"._
-That's what we do. Note that the pico SDK is installed in a new directory `pico` that
-will be created in the directory where you run `pico_setup.sh`.
+That's what we do: we run `pico_setup.sh`. Note that the pico SDK is installed in a new directory `pico` that
+will be created in the directory where we run the setup script.
 
 ```text
 pi@raspberrypi:~ $ pwd
@@ -38,7 +47,7 @@ pi@raspberrypi:~ $ ./pico_setup.sh
 pi@raspberrypi:~ $
 ```
 
-The last command takes around 15 minutes and installs all necesary components.
+The last command takes around 15 minutes and installs all necesary SDK components. Let's inspect that.
 
 ```text
 pi@raspberrypi:~ $ tree -L 1 pico
@@ -53,25 +62,26 @@ pico
 └── vscode.deb
 ```
 
-By the way `pico_setup.sh` also adds some variables (see `.bashrc`).
+By the way `pico_setup.sh` also adds some environment variables (see `.bashrc`).
 
 ## Step 2: Example project
 
 I created a project that prints some text over uart and blinks the LED.
 The project consists of two files, a c-source `UartLed.c`
 and a cmake file `CMakeLists.txt`. Copy the directory `UartLed` from the
-[repo](UartLed) to e.g. the `Documents` directory on the Pi400. It is just a test
+[repo](UartLed) to e.g. the `Documents` directory on the Pi 400. It is just a test
 program, you can delete it later.
 
 Note that the `CMakeList.txt` configures stdio to use `uart` (i.e. uart0) and not `usb`.
-The reason is that the probe also allows bridging the UART, and we want to test that.
 
 ```text
 pico_enable_stdio_uart(UartLed 1)
 pico_enable_stdio_usb(UartLed 0)
 ```
 
-We initiate the build process.
+The reason is that the probe also allows bridging the UART, and we want to test that.
+
+We initiate the build process of our project: create the `build` directory, run `cmake` and `make`:
 
 ```text
 pi@raspberrypi:~/Documents $ cd UartLed/
@@ -136,10 +146,10 @@ We should see the LED flash.
 ## Step 4: Upload picoprobe firmware
 
 Next step is to upload the picoprobe firmware.
-Picoprobe is downloaded and build as part of the Pico SDK script.
+Picoprobe was downloaded and build as part of the Pico SDK script.
 
 So again, keep the BOOTSEL button of the Pico down while plugging its
-USB plug in the Pi 400, then release the BOOTSEL. 
+USB plug in the Pi 400, then release the BOOTSEL.
 Now copy the picoprobe firmware to the pico.
 
 ```text
@@ -153,7 +163,9 @@ This pico now has the picoprobe firmware. Mark it as such.
 
 Now wire a second pico, the "target" to the just created picoprobe.
 
-TODO: schematics
+![Schematics](schematics.drawio.png)
+
+Find below my actual wiring. I have a very limited assortment of clip-wires, so I couldn't match up the colors to the schematics.
 
 ![Pico to pico](pico-pico.jpg)
 
@@ -189,14 +201,15 @@ Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
 Our device is `2e8a:0004` which is confirmed by unplugging the
 picoprobe and re-inserting it.
 
-We need to create a file `12-picoprobe.rules` ("random name") in
+We need to "whitelist" this device in udev.
+We create a file `12-picoprobe.rules` ("random name") in
 `/usr/lib/udev_rules.d`.
 
 ```text
 pi@raspberrypi:~/pico/picoprobe/build $ sudo vi /usr/lib/udev/rules.d/12-picoprobe.rules
 ```
 
-This is the udev rule I created: I couple the vendor and product id 
+This is the udev rule I created: I couple the vendor and product id
 to giving the device "chmod flags" 644 and group id "plugdev",
 a group that `pi` is member of.
 
@@ -207,6 +220,283 @@ ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="0004", MODE="664", GROUP="plugdev"
 
 Plug and unplug the picoprobe, and retry the `openocd` command without sudo.
 It should now work.
+
+```text
+pi@raspberrypi:~/Documents/UartLed/build $ openocd  -f interface/picoprobe.cfg  -f target/rp2040.cfg  -c "program UartLed.elf verify reset exit"
+Open On-Chip Debugger 0.10.0+dev-geb22ace-dirty (2021-03-15-20:54)
+...
+** Programming Started **
+...
+** Programming Finished **
+** Verify Started **
+...
+** Verified OK **
+** Resetting Target **
+shutdown command invoked
+pi@raspberrypi:~/Documents/UartLed/build $
+```
+
+## Intermezzo A: understanding OpenOCD
+
+This is a long section, but you can skip it.
+We experiment with `openocd`, and two clients: `telnet` and `gdb`.
+
+### Telnet client
+
+In the previous section, we gave an openocd command.
+If we look it it carefully, we see that it consists has three arguments:
+`-f interface/picoprobe.cfg`, `-f target/rp2040.cfg`, and `-c "program UartLed.elf verify reset exit"`.
+
+Those arguments have a lot in common. Openocd has a command interpreter, and the `-f` option feeds a text file with commands to openocd. We see that two of of the arguments have that form. The first feeds commands to inform openocd what kind of _probe_ is installed. The second file feeds commands to inform openocd what kind of _target_ is behind the probe. The third is an _inline_ command.
+
+As an experiment, open a second terminal and run openocd without the inline command: `openocd  -f interface/picoprobe.cfg  -f target/rp2040.cfg`. This starts openocd, but without the commands, it doesn't stop.
+Instead, as the ouput shows, it opens servers.
+
+```text
+pi@raspberrypi:~ $ openocd  -f interface/picoprobe.cfg  -f target/rp2040.cfg 
+Open On-Chip Debugger 0.10.0+dev-geb22ace-dirty (2021-03-15-20:54)
+...
+Info : Listening on port 6666 for tcl connections
+Info : Listening on port 4444 for telnet connections
+...
+Info : Listening on port 3333 for gdb connections
+```
+
+The interesting one for now is the telnet server. Start a telnet client (you may need to install one first `sudo apt-get install telnet`) in
+another terminal. I suggest to change the LED blink frequency in UartLed.c and re-`make` that project first. Then we load the binary via the telnet client.
+
+```text
+pi@raspberrypi:~/Documents/UartLed/build $ telnet localhost 4444
+...
+> program /home/pi/Documents/UartLed/build/UartLed.elf
+...
+** Programming Finished **
+> reset
+> exit
+Connection closed by foreign host.
+pi@raspberrypi:~/Documents/UartLed/build $ 
+```
+
+### OpenOCD details
+
+We can also check which _adapters_ (openocd term for probes) and _transports_ (openocd term for interface types) are supported by the openocd on our host.
+
+```text
+pi@raspberrypi:~/Documents/UartLed/build $ telnet localhost 4444
+...
+> adapter list
+The following debug adapters are available:
+1: ftdi
+2: usb_blaster
+3: ft232r
+4: presto
+5: usbprog
+6: openjtag
+7: jlink
+8: vsllink
+9: rlink
+10: ulink
+11: arm-jtag-ew
+12: hla
+13: osbdm
+14: opendous
+15: sysfsgpio
+16: aice
+17: bcm2835gpio
+18: picoprobe
+19: xds110
+20: st-link
+
+> transport list
+The following transports are available:
+	swd
+	dapdirect_swd
+	dapdirect_jtag
+	swim
+	aice_jtag
+	hla_jtag
+	hla_swd
+	jtag
+
+> exit
+Connection closed by foreign host.
+```
+
+We see that `picoprobe` (18) support is hardwired into openocd (probably upon request of the raspberry foundation). That `swd` is supported is less of a surprise; itt is an older standard supported by ARM.
+
+If we check the first command file we send to openocd we see it is a short file selecting the `adapter driver`, `adapter speed` and the `transport`.
+
+```text
+pi@raspberrypi:/usr/local/bin $ cat /usr/local/share/openocd/scripts/interface/picoprobe.cfg
+# Adapter section
+adapter driver picoprobe
+transport select swd
+adapter speed 5000
+pi@raspberrypi:/usr/local/bin $
+```
+
+The other file make much less sense to me. But we do see the `rp2040` listed with two CPUs.
+
+```text
+pi@raspberrypi:~/Documents/UartLed/build $ cat /usr/local/share/openocd/scripts/target/rp2040.cfg 
+source [find target/swj-dp.tcl]
+source [find mem_helper.tcl]
+
+set _CHIPNAME rp2040
+set _CPUTAPID 0x01002927
+set _ENDIAN little
+
+swj_newdap $_CHIPNAME.core0 cpu -dp-id $_CPUTAPID -instance-id 0
+swj_newdap $_CHIPNAME.core1 cpu -dp-id $_CPUTAPID -instance-id 1
+...
+set _FLASHNAME $_CHIPNAME.flash
+...
+```
+
+### GDB 
+You might have noticed the openocd not only starts a telnet server, but also a gdb server. That means we can also talk to openocd with a gdb client instead of a telnet client. Let's try to use gdb to flash (and debug). I assume that the telnet client is `exit`ed, but the openocd is still running in the other terminal.
+
+Let's first change the LED blink frequency in UartLed.c and re-`make` that project first.
+
+Next run the gdb client (if you installed the full pico SDK you have it, otherwise run `sudo apt install gdb-multiarch`).
+
+```text
+pi@raspberrypi:~/Documents/UartLed/build $ gdb UartLed.elf 
+```
+
+Connect to the gdb server in openocd.
+
+```text
+(gdb) target remote localhost:3333
+```
+
+Load the binary with the debug symbols.
+
+```text
+(gdb) load
+Loading section .boot2, size 0x100 lma 0x10000000
+Loading section .text, size 0x4128 lma 0x10000100
+Loading section .rodata, size 0xd28 lma 0x10004228
+Loading section .binary_info, size 0x28 lma 0x10004f50
+Loading section .data, size 0x1e0 lma 0x10004f78
+Start address 0x100001e8, load size 20824
+Transfer rate: 6 KB/sec, 3470 bytes/write.
+```
+
+Reset and start the application.
+
+```text
+(gdb) monitor reset init
+```
+
+The app is reset, but halted. We must explicitly start it.
+
+```test
+(gdb) continue
+Continuing.
+```
+
+To pause the program, issue a `^C`.
+The program halt somewhere deep in a timer library (the impementation of `sleep_ms()`).
+
+```test
+^C
+target halted due to debug-request, current mode: Thread 
+...
+110	    uint32_t hi = timer_hw->timerawh;
+```
+
+Let's set a breakpoint at the first line of the blink loop (line 23 in file `UartLed.c`).
+
+```text
+(gdb) break UartLed.c:23
+Breakpoint 1 at 0x10000384: file /home/pi/Documents/UartLed/UartLed.c, line 24.
+```
+
+And we continue the program (we abbreviate `continue` to `c`).
+
+```text
+(gdb) c
+Continuing.
+```
+
+We see the LED blink once and then the breakpoint hits.
+
+```text
+Thread 1 hit Breakpoint 1, main () at /home/pi/Documents/UartLed/UartLed.c:24
+24	        sleep_ms(500);
+```
+
+We can do this is couple of times.
+If we want we can inspect variables.
+
+```text
+(gdb) print count
+$1 = 6
+```
+
+If we continues once and then `print count` again, we see it is one higher.
+
+```text
+(gdb) c
+Continuing.
+target halted due to debug-request, current mode: Thread 
+xPSR: 0x01000000 pc: 0x0000012a msp: 0x20041f00
+
+Thread 1 hit Breakpoint 1, main () at /home/pi/Documents/UartLed/UartLed.c:24
+24	        sleep_ms(500);
+(gdb) print count
+$2 = 7
+```
+
+We can also inspect where all breakpoints are set with the `break` command.
+
+``` text
+(gdb) break
+Note: breakpoint 1 also set at pc 0x10000384.
+Breakpoint 2 at 0x10000384: file /home/pi/Documents/UartLed/UartLed.c, line 24.
+```
+
+For more inspiration enter `help`.
+
+```text
+(gdb) help
+List of classes of commands:
+
+aliases -- Aliases of other commands
+breakpoints -- Making program stop at certain points
+data -- Examining data
+files -- Specifying and examining files
+internals -- Maintenance commands
+obscure -- Obscure features
+running -- Running the program
+stack -- Examining the stack
+status -- Status inquiries
+support -- Support facilities
+tracepoints -- Tracing of program execution without stopping the program
+user-defined -- User-defined commands
+
+Type "help" followed by a class name for a list of commands in that class.
+Type "help all" for the list of all commands.
+Type "help" followed by command name for full documentation.
+Type "apropos word" to search for commands related to "word".
+Command name abbreviations are allowed if unambiguous.
+```
+
+Finally we quit gdb client.
+
+```text
+(gdb) quit
+A debugging session is active.
+
+	Inferior 1 [Remote target] will be detached.
+
+Quit anyway? (y or n) y
+Detaching from program: /home/pi/Documents/UartLed/build/UartLed.elf, Remote target
+Ending remote debugging.
+[Inferior 1 (Remote target) detached]
+pi@raspberrypi:~/Documents/UartLed/build $ 
+```
 
 ## Step 7: Serial over picoprobe
 
@@ -247,6 +537,5 @@ Exit with ctrl-A x return.
 ## Step 8: VS Code
 
 TODO launch file and settings file
-
 
 (end)
