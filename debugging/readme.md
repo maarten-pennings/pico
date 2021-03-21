@@ -451,7 +451,7 @@ $2 = 7
 
 We can also inspect where all breakpoints are set with the `break` command.
 
-``` text
+```text
 (gdb) break
 Note: breakpoint 1 also set at pc 0x10000384.
 Breakpoint 2 at 0x10000384: file /home/pi/Documents/UartLed/UartLed.c, line 24.
@@ -514,7 +514,7 @@ minicom -b 115200 -o -D /dev/ttyACM0
 
 We see the counted messages from `UartLed`.
 
-```
+```text
 Welcome to minicom 2.7.1
 
 OPTIONS: I18n 
@@ -536,6 +536,138 @@ Exit with ctrl-A x return.
 
 ## Step 8: VS Code
 
-TODO launch file and settings file
+We will now switch to VS Code. Visual Studio code is installed by the SDK setup script.
+VS code needs a coupe of extensions, but also these are all installed by the SDK setup script.
+ - `ms-vscode.cpptools`
+   adds language support for C/C++ to Visual Studio Code, 
+   including features such as IntelliSense and debugging.
+ - `ms-vscode.cmake-tools`
+   provides a workflow for CMake-based projects in Visual Studio Code.
+   It presumably depends on the extension `twxs.cmake`
+   which provides support for CMake in Visual Studio Code.
+ - `marus25.cortex-debug`
+   provides debugging support for ARM Cortex-M Microcontrollers 
+   using OpenOCD GDB Server.
+
+You should find these in the Side Bar (black bar that is by default on the left)
+in the fifth option `Extensions`.
+
+Note that there is a directory `~/.vscode` with per user settings.
+Most notably, it contains the installed extensions.
+
+I suggest to remove the `build` directory of `UartLed` project.
+
+I open vscode by typing `code` in the directory `/home/pi/Documents/UartLed` in a terminal.
+Maybe you can also right click on the project directory in the file manager
+and select "Visual Studio Code" from the context menu. But I'm not sure 
+that the `PICO_SDK_PATH` is then set, because that is loaded by bash (`~/.bashrc`) in a terminal.
+
+I get a couple of puzzling pop-ups.
+ - A notification.
+   `Would you like to configure project 'UartLed'?` from `Source: CMake Tools (Extension)`.
+   I pressed yes.
+ - A follow up notification from the same extension `Always configure projects upon opening?`.
+   I also pressed yes. I presume that answering "Yes" here means that the previous
+   question is from now on no longer asked for CMake projects; it defaults to yes.
+ - A third notification. 
+   `Configure your IntelliSense settings to help find missing headers.`
+ - A fourth one. 
+   `Insiders version 1.3.0-insiders is available. Would you like to switch to the Insiders channel and install this update?`  
+   No Idea what it means. Pressed "Yes"
+ - Finally, I get a "Select a Kit for UartLed". That question appears in a top-bar;
+   it is not a notification like before. It also disapears easily. But you can
+   get it back by clicking in the status bar (bottom) where it says
+   `CMake: [Debug]: Ready`. I selected `GCC for arm-none-eabi 7.3.1`.
+ - A follow-up question pops up, which asks for a build configuration; I selected `Debug`.
+   After this, we see that a `build` directory is automatically generates.
+ - Note that by pressing `Build` in the status bar, a new build is started.
+   By Pressing `CMake: [Debug]: Ready` we can switch to `Release`.
+   But probably `Debug` is better for symbols generated for the debugger.
+
+For running (debgging) we need to link vscode to openocd/gdb.
+As the `getting-started-with-pico.pdf` explains.
+_The SDK contains an debug configuration that will start OpenOCD, 
+attach GDB, and finally launch the application. It also provides a 
+settings file, which removes some potentially confusing options from 
+the CMake plugin (including broken Debug and Run buttons that attempt 
+to run a Pico binary on the host)._
+
+We exit `code` and create a `.vscode` directory with two config files.
+
+```text
+pi@raspberrypi:~/Documents/UartLed $ mkdir .vscode
+pi@raspberrypi:~/Documents/UartLed $ cp ~/pico/pico-examples/ide/vscode/launch-raspberrypi-swd.json .vscode/launch.json
+pi@raspberrypi:~/Documents/UartLed $ cp ~/pico/pico-examples/ide/vscode/settings.json .vscode/settings.json
+pi@raspberrypi:~/Documents/UartLed $ 
+```
+
+We need to patch the configuration, because the interface by default is Pi 400 not picoprobe.
+So change
+
+```text
+"configFiles": [
+ "interface/raspberrypi-swd.cfg",
+ "target/rp2040.cfg"
+]
+```
+
+to
+
+```text
+"configFiles": [
+ "interface/picoprobe.cfg",
+ "target/rp2040.cfg"
+]
+```
+
+The we restart `code` in our project dierctory.
+
+```text
+pi@raspberrypi:~/Documents/UartLed $ ls -al
+total 24
+drwxr-xr-x 4 pi pi 4096 Mar 21 22:34 .
+drwxr-xr-x 3 pi pi 4096 Mar 21 21:18 ..
+drwxr-xr-x 7 pi pi 4096 Mar 21 22:27 build
+-rw-r--r-- 1 pi pi  847 Mar 15 21:05 CMakeLists.txt
+-rw-r--r-- 1 pi pi  619 Mar 21 19:17 UartLed.c
+drwxr-xr-x 2 pi pi 4096 Mar 21 22:36 .vscode
+pi@raspberrypi:~/Documents/UartLed $ code
+```
+
+In the Side Bar click the Run and Debug (4th from the top)
+and press the Start debugging green rectangle at the top.
+
+The OUTPUT will show the compilation.
+
+The DEBUG CONSOLE will show the gdb server output.
+
+In the TERMINAL we can start
+
+```text
+minicom -b 115200 -o -D /dev/ttyACM0
+```
+
+I am wondering wy the `Build` button should be hidden.
+So I disabled the hiding: `.vscode\settings.json`:
+
+```text
+    "cmake.statusbar.advanced": {
+        "debug": {
+            "visibility": "hidden"
+        },
+        "launch": {
+            "visibility": "hidden"
+        },
+        // "build": {
+        //     "visibility": "hidden"
+        // },
+        "buildTarget": {
+            "visibility": "hidden"
+        }
+    }
+```
+
+I have created a `Template` [directory](Template), with `.vscode` directory
+with `launch.json` (for picoprobe) and a `settings.json` (with a build button), a project file `CMakeLists.txt` and a source file `UartLed.c`. Note that if you rename `UartLed.c`, you should also update all occurences of `UartLed` in `CMakeLists.txt`.
 
 (end)
